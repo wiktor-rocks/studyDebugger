@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Study Debugger (Vanilla JS)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 dark:text-gray-100 p-6">
+  <div id="root" class="max-w-3xl mx-auto"></div>
+
+  <script>
+    // Application state
+    const state = {
+      topic: '',
+      sections: [],
+      currentSectionIndex: 0,
+      mode: 'sections',
+      stepIndex: 0,
+      loops: {},
+      summary: ''
+    };
+
+    // Warn before leaving
+    window.addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue = ''; });
+
+    const SECTION_STEPS = [
+      'Free-write: jot down your thoughts and questions',
+      'Identify gaps from your notes',
+      'Research each gap and add answers back into your notes'
+    ];
+
+    const SECTION_STEPS_SMALL = ['Free-write','Gaps','Research'];
+
+    const POST_STEPS = [
+      'Summarize how all sections fit together',
+      'Test or teach the overview to confirm true understanding'
+    ];
+
+    function createElement(tag, { className = '', html = '', text = '' } = {}) {
+      const el = document.createElement(tag);
+      if (className) el.className = className;
+      if (html) el.innerHTML = html;
+      if (text) el.textContent = text;
+      return el;
+    }
+
+    function render() {
+      const root = document.getElementById('root');
+      root.innerHTML = '';
+      if (!state.topic) {
+        renderTopicForm(root);
+      } else if (state.sections.length === 0) {
+        renderSectionForm(root);
+      } else {
+        renderMainUI(root);
+      }
+    }
+
+    function renderTopicForm(container) {
+      const card = createElement('div',{className:'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow'});
+      card.append(
+        createElement('h1',{className:'text-2xl font-semibold mb-4',text:'Study Debugger'}),
+        createElement('p',{className:'mb-4',text:'Enter overarching topic:'})
+      );
+      const row = createElement('div',{className:'flex space-x-2'});
+      const input = createElement('input',{className:'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1'});
+      input.placeholder = 'Topic';
+      const btn = createElement('button',{className:'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',text:'Set Topic'});
+      btn.onclick = () => {
+        const t = input.value.trim(); if (!t) return;
+        state.topic = t;
+        render();
+      };
+      row.append(input, btn);
+      card.appendChild(row);
+      container.appendChild(card);
+    }
+
+    function renderSectionForm(container) {
+      const card = createElement('div',{className:'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow'});
+      card.append(
+        createElement('h1',{className:'text-2xl font-semibold mb-2',text: state.topic}),
+        createElement('p',{className:'mb-4',text:'Add sections to begin:'})
+      );
+      const row = createElement('div',{className:'flex space-x-2'});
+      const input = createElement('input',{className:'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1'});
+      input.placeholder = 'Section name';
+      const btn = createElement('button',{className:'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',text:'Add'});
+      btn.onclick = () => {
+        const name = input.value.trim(); if (!name) return;
+        state.sections.push({ name, understood:false });
+        state.loops[name] = [];
+        input.value = '';
+        render();
+      };
+      row.append(input, btn);
+      card.appendChild(row);
+      container.appendChild(card);
+    }
+
+    function renderMainUI(container) {
+      const section = state.sections[state.currentSectionIndex];
+      if (state.mode==='sections' && !state.loops[section.name]?.length) state.loops[section.name] = [Array(SECTION_STEPS.length).fill('')];
+      const loops = state.loops[section.name];
+      const loopIndex = loops.length - 1;
+
+      const card = createElement('div',{className:'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow'});
+      card.append(
+        createElement('h1',{className:'text-2xl font-semibold mb-1',text: state.topic}),
+        createElement('h2',{className:'text-xl font-medium mb-4',text:'Study Debugger'})
+      );
+
+      renderHeader(card, section, loops.length);
+      renderStepContent(card, loops[loopIndex]);
+      renderControls(card, section, loops);
+      if (state.mode === 'sections') renderSectionManager(card);
+      renderFooter(card);
+      container.appendChild(card);
+    }
+
+    function renderHeader(container, section, loopsCount) {
+      const hdr = createElement('div',{className:'mb-4'});
+      if (state.mode==='sections') {
+        hdr.append(
+          createElement('div',{className:'font-medium',text:`Section: ${section.name}`}),
+          createElement('div',{className:'text-sm text-gray-500 dark:text-gray-400',text:`Loops completed: ${loopsCount-1}`})
+        );
+      } else {
+        hdr.append(createElement('div',{className:'text-purple-300 font-medium',text:'Post-Section Phase'}));
+      }
+      container.appendChild(hdr);
+    }
+
+    function renderStepContent(container, currentLoop) {
+      const box = createElement('div',{className:'bg-gray-50 dark:bg-gray-700 p-6 rounded font-mono text-base mb-6'});
+      const steps = state.mode==='sections'? SECTION_STEPS:POST_STEPS;
+      const label = state.mode==='sections'?`Step ${state.stepIndex+1}`:`Post-Step ${state.stepIndex+1}`;
+      box.append(createElement('strong',{text:`${label}: `}), document.createTextNode(steps[state.stepIndex]));
+
+      if (state.mode==='sections') {
+        const ta = createElement('textarea',{className:'w-full mt-2 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-gray-100'});
+        ta.rows=4; ta.value=currentLoop[state.stepIndex]; ta.oninput=e=>currentLoop[state.stepIndex]=e.target.value;
+        box.appendChild(ta);
+      } else {
+        if (state.stepIndex===0) {
+          box.append(createElement('h2',{className:'font-semibold mt-4 mb-2',text:'All Sections & Notes:'}));
+          state.sections.forEach(sec=>{
+            box.append(createElement('div',{className:'mt-4 font-medium',text:sec.name}));
+            (state.loops[sec.name]||[]).forEach((loop,i)=>{
+              box.append(createElement('div',{className:'mt-2 underline',text:`Iteration ${i+1}`}));
+              loop.forEach((ent,j)=>{
+                box.append(createElement('div',{className:'ml-4 mb-1',html:`<strong>${SECTION_STEPS_SMALL[j]}:</strong> ${ent||'<em>(no entry)</em>'}`}));
+              });
+            });
+          });
+          const ta2=createElement('textarea',{className:'w-full mt-4 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-gray-100'});
+          ta2.rows=4; ta2.value=state.summary; ta2.oninput=e=>state.summary=e.target.value;
+          box.append(createElement('h2',{className:'font-semibold mt-6 mb-2',text:'Summarize how all sections fit together:'}));
+          box.appendChild(ta2);
+        } else {
+          box.append(createElement('h2',{className:'font-semibold mt-4 mb-2',text:'Your Summary:'}));
+          box.append(createElement('p',{className:'whitespace-pre-wrap bg-gray-100 dark:bg-gray-800 p-2 rounded',text:state.summary||'No summary yet.'}));
+          box.append(createElement('h2',{className:'font-semibold mt-6 mb-2',text:'All Sections & Notes:'}));
+          state.sections.forEach(sec=>{
+            box.append(createElement('div',{className:'mt-4 font-medium',text:sec.name}));
+            (state.loops[sec.name]||[]).forEach((loop,i)=>{
+              box.append(createElement('div',{className:'mt-2 underline',text:`Iteration ${i+1}`}));
+              loop.forEach((ent,j)=>{
+                box.append(createElement('div',{className:'ml-4 mb-1',html:`<strong>${SECTION_STEPS_SMALL[j]}:</strong> ${ent||'<em>(no entry)</em>'}`}));
+              });
+            });
+          });
+        }
+      }
+      container.appendChild(box);
+    }
+
+    function renderControls(container, section, history) {
+      const ctrls = createElement('div',{className:'flex space-x-4 mb-6'});
+      const prev = createElement('button',{className:'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg disabled:opacity-50',text:'Previous'});
+      prev.disabled = state.stepIndex===0; prev.onclick = ()=>{state.stepIndex--;render();}; ctrls.appendChild(prev);
+      if(state.mode==='sections'){
+        const mark = createElement('button',{className:'px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg',text:'Mark Understood'});
+        mark.onclick = ()=>{section.understood=true; if(state.currentSectionIndex<state.sections.length-1){state.currentSectionIndex++;state.stepIndex=0;}else{state.mode='post';state.stepIndex=0;}render();}; ctrls.appendChild(mark);
+      }
+      const next = createElement('button',{className:'px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-50',text:'Next'});
+      next.disabled = (state.mode==='post'&&state.stepIndex>=POST_STEPS.length-1);
+      next.onclick = ()=>{if(state.mode==='sections'){if(state.stepIndex<SECTION_STEPS.length-1){state.stepIndex++;}else{history.push(Array(SECTION_STEPS.length).fill(''));state.stepIndex=0;}}else{state.stepIndex=Math.min(state.stepIndex+1,POST_STEPS.length-1);}render();}; ctrls.appendChild(next);
+      container.appendChild(ctrls);
+    }
+
+    function renderSectionManager(container) {
+      const mgr = createElement('div',{className:'mt-6'});
+      mgr.append(createElement('h2',{className:'font-semibold mb-2',text:'Manage Sections'}));
+      const row = createElement('div',{className:'flex space-x-2 mb-4'});
+      const inp = createElement('input',{className:'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1'});
+      inp.placeholder='Section name'; const ab = createElement('button',{className:'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',text:'Add Section'});
+      ab.onclick = ()=>{const n=inp.value.trim();if(!n)return;state.sections.push({name:n,understood:false});state.loops[n]=[];inp.value='';render();}; row.append(inp,ab);mgr.appendChild(row);
+      const ul = createElement('ul',{className:'space-y-2'});
+      state.sections.forEach((s,i)=>{const li = createElement('li',{className:'flex justify-between items-center bg-gray-100 dark:bg-gray-800 p-2 rounded'});
+        li.append(createElement('span',{className:'text-gray-900 dark:text-gray-100',text:s.name}));
+        const rm = createElement('button',{className:'text-red-500 hover:text-red-700 text-sm',text:'Remove'});
+        rm.onclick = ()=>{state.sections.splice(i,1);delete state.loops[s.name];state.currentSectionIndex=Math.max(0,state.currentSectionIndex-1);render();};
+        li.appendChild(rm);ul.appendChild(li);
+      });mgr.appendChild(ul);container.appendChild(mgr);
+    }
+
+    function renderFooter(container) {
+      container.appendChild(createElement('div',{className:'mt-10 text-center text-sm text-gray-400 dark:text-gray-500',text:'Study Debugger — Vanilla JS Edition'}));
+    }
+
+    render();
+  </script>
+</body>
+</html>
