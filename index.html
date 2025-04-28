@@ -10,207 +10,440 @@
   <div id="root" class="max-w-3xl mx-auto"></div>
 
   <script>
-    // Application state
-    const state = {
-      topic: '',
-      sections: [],
-      currentSectionIndex: 0,
-      mode: 'sections',
-      stepIndex: 0,
-      loops: {},
-      summary: ''
+    // State Management Module
+    // Manages the application state and provides methods to update it
+    const StateManager = {
+      state: {
+        topic: '', // Main topic of study
+        sections: [], // Array of section objects {name, understood}
+        currentSectionIndex: 0, // Index of currently active section
+        mode: 'sections', // 'sections' or 'post' mode
+        stepIndex: 0, // Current step in section or post mode
+        loops: {}, // Stores notes for each section's iterations
+        summary: '' // Final summary in post mode
+      },
+
+      // Constants defining the steps for each mode
+      SECTION_STEPS: [
+        'Free-write: jot down your thoughts and questions',
+        'Identify gaps from your notes',
+        'Research each gap and add answers back into your notes'
+      ],
+      SECTION_STEPS_SMALL: ['Free-write', 'Gaps', 'Research'],
+      POST_STEPS: [
+        'Summarize how all sections fit together',
+        'Test or teach the overview to confirm true understanding'
+      ],
+
+      // Initialize or update section loops
+      initializeLoops(sectionName) {
+        if (!this.state.loops[sectionName]) {
+          this.state.loops[sectionName] = [Array(this.SECTION_STEPS.length).fill('')];
+        }
+      },
+
+      // Get current section
+      getCurrentSection() {
+        return this.state.sections[this.state.currentSectionIndex] || {};
+      },
+
+      // Update state and re-render
+      update(updates) {
+        Object.assign(this.state, updates);
+        Renderer.render();
+      }
     };
 
-    // Warn before leaving
-    window.addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue = ''; });
+    // Utility Module
+    // Provides helper functions for DOM manipulation
+    const Utils = {
+      // Create a DOM element with specified attributes
+      createElement(tag, { className = '', html = '', text = '', ...attrs } = {}) {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        if (html) el.innerHTML = html;
+        if (text) el.textContent = text;
+        Object.entries(attrs).forEach(([key, value]) => el[key] = value);
+        return el;
+      },
 
-    const SECTION_STEPS = [
-      'Free-write: jot down your thoughts and questions',
-      'Identify gaps from your notes',
-      'Research each gap and add answers back into your notes'
-    ];
-
-    const SECTION_STEPS_SMALL = ['Free-write','Gaps','Research'];
-
-    const POST_STEPS = [
-      'Summarize how all sections fit together',
-      'Test or teach the overview to confirm true understanding'
-    ];
-
-    function createElement(tag, { className = '', html = '', text = '' } = {}) {
-      const el = document.createElement(tag);
-      if (className) el.className = className;
-      if (html) el.innerHTML = html;
-      if (text) el.textContent = text;
-      return el;
-    }
-
-    function render() {
-      const root = document.getElementById('root');
-      root.innerHTML = '';
-      if (!state.topic) {
-        renderTopicForm(root);
-      } else if (state.sections.length === 0) {
-        renderSectionForm(root);
-      } else {
-        renderMainUI(root);
+      // Clear container content
+      clearContainer(container) {
+        container.innerHTML = '';
       }
-    }
+    };
 
-    function renderTopicForm(container) {
-      const card = createElement('div',{className:'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow'});
-      card.append(
-        createElement('h1',{className:'text-2xl font-semibold mb-4',text:'Study Debugger'}),
-        createElement('p',{className:'mb-4',text:'Enter overarching topic:'})
-      );
-      const row = createElement('div',{className:'flex space-x-2'});
-      const input = createElement('input',{className:'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1'});
-      input.placeholder = 'Topic';
-      const btn = createElement('button',{className:'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',text:'Set Topic'});
-      btn.onclick = () => {
-        const t = input.value.trim(); if (!t) return;
-        state.topic = t;
-        render();
-      };
-      row.append(input, btn);
-      card.appendChild(row);
-      container.appendChild(card);
-    }
-
-    function renderSectionForm(container) {
-      const card = createElement('div',{className:'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow'});
-      card.append(
-        createElement('h1',{className:'text-2xl font-semibold mb-2',text: state.topic}),
-        createElement('p',{className:'mb-4',text:'Add sections to begin:'})
-      );
-      const row = createElement('div',{className:'flex space-x-2'});
-      const input = createElement('input',{className:'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1'});
-      input.placeholder = 'Section name';
-      const btn = createElement('button',{className:'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',text:'Add'});
-      btn.onclick = () => {
-        const name = input.value.trim(); if (!name) return;
-        state.sections.push({ name, understood:false });
-        state.loops[name] = [];
-        input.value = '';
-        render();
-      };
-      row.append(input, btn);
-      card.appendChild(row);
-      container.appendChild(card);
-    }
-
-    function renderMainUI(container) {
-      const section = state.sections[state.currentSectionIndex];
-      if (state.mode==='sections' && !state.loops[section.name]?.length) state.loops[section.name] = [Array(SECTION_STEPS.length).fill('')];
-      const loops = state.loops[section.name];
-      const loopIndex = loops.length - 1;
-
-      const card = createElement('div',{className:'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow'});
-      card.append(
-        createElement('h1',{className:'text-2xl font-semibold mb-1',text: state.topic}),
-        createElement('h2',{className:'text-xl font-medium mb-4',text:'Study Debugger'})
-      );
-
-      renderHeader(card, section, loops.length);
-      renderStepContent(card, loops[loopIndex]);
-      renderControls(card, section, loops);
-      if (state.mode === 'sections') renderSectionManager(card);
-      renderFooter(card);
-      container.appendChild(card);
-    }
-
-    function renderHeader(container, section, loopsCount) {
-      const hdr = createElement('div',{className:'mb-4'});
-      if (state.mode==='sections') {
-        hdr.append(
-          createElement('div',{className:'font-medium',text:`Section: ${section.name}`}),
-          createElement('div',{className:'text-sm text-gray-500 dark:text-gray-400',text:`Loops completed: ${loopsCount-1}`})
+    // UI Components Module
+    // Contains reusable UI components
+    const Components = {
+      // Topic input form
+      topicForm() {
+        const card = Utils.createElement('div', { className: 'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow' });
+        card.append(
+          Utils.createElement('h1', { className: 'text-2xl font-semibold mb-4', text: 'Study Debugger' }),
+          Utils.createElement('p', { className: 'mb-4', text: 'Enter overarching topic:' })
         );
-      } else {
-        hdr.append(createElement('div',{className:'text-purple-300 font-medium',text:'Post-Section Phase'}));
-      }
-      container.appendChild(hdr);
-    }
+        const row = Utils.createElement('div', { className: 'flex space-x-2' });
+        const input = Utils.createElement('input', {
+          className: 'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1',
+          placeholder: 'Topic'
+        });
+        const btn = Utils.createElement('button', {
+          className: 'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',
+          text: 'Set Topic'
+        });
+        btn.onclick = () => {
+          const topic = input.value.trim();
+          if (topic) StateManager.update({ topic });
+        };
+        row.append(input, btn);
+        card.appendChild(row);
+        return card;
+      },
 
-    function renderStepContent(container, currentLoop) {
-      const box = createElement('div',{className:'bg-gray-50 dark:bg-gray-700 p-6 rounded font-mono text-base mb-6'});
-      const steps = state.mode==='sections'? SECTION_STEPS:POST_STEPS;
-      const label = state.mode==='sections'?`Step ${state.stepIndex+1}`:`Post-Step ${state.stepIndex+1}`;
-      box.append(createElement('strong',{text:`${label}: `}), document.createTextNode(steps[state.stepIndex]));
+      // Section input form
+      sectionForm() {
+        const card = Utils.createElement('div', { className: 'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow' });
+        card.append(
+          Utils.createElement('h1', { className: 'text-2xl font-semibold mb-2', text: StateManager.state.topic }),
+          Utils.createElement('p', { className: 'mb-4', text: 'Add sections to begin:' })
+        );
+        const row = Utils.createElement('div', { className: 'flex space-x-2' });
+        const input = Utils.createElement('input', {
+          className: 'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1',
+          placeholder: 'Section name'
+        });
+        const btn = Utils.createElement('button', {
+          className: 'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',
+          text: 'Add'
+        });
+        btn.onclick = () => {
+          const name = input.value.trim();
+          if (name) {
+            StateManager.state.sections.push({ name, understood: false });
+            StateManager.initializeLoops(name);
+            input.value = '';
+            Renderer.render();
+          }
+        };
+        row.append(input, btn);
+        card.appendChild(row);
+        return card;
+      },
 
-      if (state.mode==='sections') {
-        const ta = createElement('textarea',{className:'w-full mt-2 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-gray-100'});
-        ta.rows=4; ta.value=currentLoop[state.stepIndex]; ta.oninput=e=>currentLoop[state.stepIndex]=e.target.value;
-        box.appendChild(ta);
-      } else {
-        if (state.stepIndex===0) {
-          box.append(createElement('h2',{className:'font-semibold mt-4 mb-2',text:'All Sections & Notes:'}));
-          state.sections.forEach(sec=>{
-            box.append(createElement('div',{className:'mt-4 font-medium',text:sec.name}));
-            (state.loops[sec.name]||[]).forEach((loop,i)=>{
-              box.append(createElement('div',{className:'mt-2 underline',text:`Iteration ${i+1}`}));
-              loop.forEach((ent,j)=>{
-                box.append(createElement('div',{className:'ml-4 mb-1',html:`<strong>${SECTION_STEPS_SMALL[j]}:</strong> ${ent||'<em>(no entry)</em>'}`}));
-              });
-            });
-          });
-          const ta2=createElement('textarea',{className:'w-full mt-4 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-gray-100'});
-          ta2.rows=4; ta2.value=state.summary; ta2.oninput=e=>state.summary=e.target.value;
-          box.append(createElement('h2',{className:'font-semibold mt-6 mb-2',text:'Summarize how all sections fit together:'}));
-          box.appendChild(ta2);
+      // Main UI with steps and controls
+      mainUI() {
+        const section = StateManager.getCurrentSection();
+        StateManager.initializeLoops(section.name);
+        const loops = StateManager.state.loops[section.name];
+        const loopIndex = loops.length - 1;
+
+        const card = Utils.createElement('div', { className: 'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow' });
+        card.append(
+          Utils.createElement('h1', { className: 'text-2xl font-semibold mb-1', text: StateManager.state.topic }),
+          Utils.createElement('h2', { className: 'text-xl font-medium mb-4', text: 'Study Debugger' })
+        );
+
+        card.append(
+          this.header(section, loops.length),
+          this.stepContent(loops[loopIndex]),
+          this.controls(section, loops)
+        );
+
+        if (StateManager.state.mode === 'sections') {
+          card.appendChild(this.sectionManager());
+        }
+
+        card.appendChild(this.footer());
+        return card;
+      },
+
+      // Header showing section info
+      header(section, loopsCount) {
+        const hdr = Utils.createElement('div', { className: 'mb-4' });
+        if (StateManager.state.mode === 'sections') {
+          hdr.append(
+            Utils.createElement('div', { className: 'font-medium', text: `Section: ${section.name}` }),
+            Utils.createElement('div', { className: 'text-sm text-gray-500 dark:text-gray-400', text: `Loops completed: ${loopsCount - 1}` })
+          );
         } else {
-          box.append(createElement('h2',{className:'font-semibold mt-4 mb-2',text:'Your Summary:'}));
-          box.append(createElement('p',{className:'whitespace-pre-wrap bg-gray-100 dark:bg-gray-800 p-2 rounded',text:state.summary||'No summary yet.'}));
-          box.append(createElement('h2',{className:'font-semibold mt-6 mb-2',text:'All Sections & Notes:'}));
-          state.sections.forEach(sec=>{
-            box.append(createElement('div',{className:'mt-4 font-medium',text:sec.name}));
-            (state.loops[sec.name]||[]).forEach((loop,i)=>{
-              box.append(createElement('div',{className:'mt-2 underline',text:`Iteration ${i+1}`}));
-              loop.forEach((ent,j)=>{
-                box.append(createElement('div',{className:'ml-4 mb-1',html:`<strong>${SECTION_STEPS_SMALL[j]}:</strong> ${ent||'<em>(no entry)</em>'}`}));
-              });
+          hdr.append(
+            Utils.createElement('div', { className: 'text-purple-300 font-medium', text: 'Post-Section Phase' })
+          );
+        }
+        return hdr;
+      },
+
+      // Step content display and input
+      stepContent(currentLoop) {
+        const box = Utils.createElement('div', { className: 'bg-gray-50 dark:bg-gray-700 p-6 rounded font-mono text-base mb-6' });
+        const steps = StateManager.state.mode === 'sections' ? StateManager.SECTION_STEPS : StateManager.POST_STEPS;
+        const label = StateManager.state.mode === 'sections' ? `Step ${StateManager.state.stepIndex + 1}` : `Post-Step ${StateManager.state.stepIndex + 1}`;
+        
+        box.append(
+          Utils.createElement('strong', { text: `${label}: ` }),
+          document.createTextNode(steps[StateManager.state.stepIndex])
+        );
+
+        if (StateManager.state.mode === 'sections') {
+          const ta = Utils.createElement('textarea', {
+            className: 'w-full mt-2 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-gray-100',
+            rows: 4,
+            value: currentLoop[StateManager.state.stepIndex] || ''
+          });
+          ta.oninput = (e) => {
+            currentLoop[StateManager.state.stepIndex] = e.target.value;
+          };
+          box.appendChild(ta);
+        } else {
+          if (StateManager.state.stepIndex === 0) {
+            box.appendChild(this.allSectionsNotes());
+            const ta = Utils.createElement('textarea', {
+              className: 'w-full mt-4 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-gray-100',
+              rows: 4,
+              value: StateManager.state.summary
+            });
+            ta.oninput = (e) => {
+              StateManager.state.summary = e.target.value;
+            };
+            box.append(
+              Utils.createElement('h2', { className: 'font-semibold mt-6 mb-2', text: 'Summarize how all sections fit together:' }),
+              ta
+            );
+          } else {
+            box.append(
+              Utils.createElement('h2', { className: 'font-semibold mt-4 mb-2', text: 'Your Summary:' }),
+              Utils.createElement('p', {
+                className: 'whitespace-pre-wrap bg-gray-100 dark:bg-gray-800 p-2 rounded',
+                text: StateManager.state.summary || 'No summary yet.'
+              }),
+              Utils.createElement('h2', { className: 'font-semibold mt-6 mb-2', text: 'All Sections & Notes:' }),
+              this.allSectionsNotes()
+            );
+          }
+        }
+        return box;
+      },
+
+      // Display all sections and their notes
+      allSectionsNotes() {
+        const container = Utils.createElement('div');
+        StateManager.state.sections.forEach((section) => {
+          container.append(
+            Utils.createElement('div', { className: 'mt-4 font-medium', text: section.name })
+          );
+          (StateManager.state.loops[section.name] || []).forEach((loop, i) => {
+            container.append(
+              Utils.createElement('div', { className: 'mt-2 underline', text: `Iteration ${i + 1}` })
+            );
+            loop.forEach((entry, j) => {
+              container.append(
+                Utils.createElement('div', {
+                  className: 'ml-4 mb-1',
+                  html: `<strong>${StateManager.SECTION_STEPS_SMALL[j]}:</strong> ${entry || '<em>(no entry)</em>'}`
+                })
+              );
             });
           });
+        });
+        return container;
+      },
+
+      // Navigation and action controls
+      controls(section, loops) {
+        const ctrls = Utils.createElement('div', { className: 'flex space-x-4 mb-6' });
+        const prev = Utils.createElement('button', {
+          className: 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg disabled:opacity-50',
+          text: 'Previous',
+          disabled: StateManager.state.stepIndex === 0
+        });
+        prev.onclick = () => {
+          StateManager.update({ stepIndex: StateManager.state.stepIndex - 1 });
+        };
+
+        // Dynamically set Next button text
+        const isLastSectionStep = StateManager.state.mode === 'sections' && StateManager.state.stepIndex === StateManager.SECTION_STEPS.length - 1;
+        const nextText = isLastSectionStep ? 'Next Iteration' : 'Next';
+        const next = Utils.createElement('button', {
+          className: 'px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-50',
+          text: nextText,
+          disabled: StateManager.state.mode === 'post' && StateManager.state.stepIndex >= StateManager.POST_STEPS.length - 1
+        });
+        next.onclick = () => {
+          if (StateManager.state.mode === 'sections') {
+            if (StateManager.state.stepIndex < StateManager.SECTION_STEPS.length - 1) {
+              StateManager.update({ stepIndex: StateManager.state.stepIndex + 1 });
+            } else {
+              loops.push(Array(StateManager.SECTION_STEPS.length).fill(''));
+              StateManager.update({ stepIndex: 0 });
+            }
+          } else {
+            StateManager.update({ stepIndex: Math.min(StateManager.state.stepIndex + 1, StateManager.POST_STEPS.length - 1) });
+          }
+        };
+
+        ctrls.appendChild(prev);
+        if (StateManager.state.mode === 'sections') {
+          // Go to Post-Section button
+          const goToPost = Utils.createElement('button', {
+            className: 'px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg',
+            text: 'Go to Post-Section'
+          });
+          goToPost.onclick = () => {
+            StateManager.update({ mode: 'post', stepIndex: 0 });
+          };
+          ctrls.appendChild(goToPost);
+        } else {
+          // Back to Sections button in post mode
+          const back = Utils.createElement('button', {
+            className: 'px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg',
+            text: 'Back to Sections'
+          });
+          back.onclick = () => {
+            StateManager.update({ mode: 'sections', stepIndex: 0 });
+          };
+          ctrls.appendChild(back);
+        }
+        ctrls.appendChild(next);
+        return ctrls;
+      },
+
+      // Section management interface
+      sectionManager() {
+        const mgr = Utils.createElement('div', { className: 'mt-6' });
+        mgr.append(
+          Utils.createElement('h2', { className: 'font-semibold mb-2', text: 'Manage Sections' })
+        );
+        const row = Utils.createElement('div', { className: 'flex space-x-2 mb-4' });
+        const input = Utils.createElement('input', {
+          className: 'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1',
+          placeholder: 'Section name'
+        });
+        const btn = Utils.createElement('button', {
+          className: 'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',
+          text: 'Add Section'
+        });
+        btn.onclick = () => {
+          const name = input.value.trim();
+          if (name) {
+            StateManager.state.sections.push({ name, understood: false });
+            StateManager.initializeLoops(name);
+            input.value = '';
+            Renderer.render();
+          }
+        };
+        row.append(input, btn);
+        mgr.appendChild(row);
+
+        const ul = Utils.createElement('ul', { className: 'space-y-2' });
+        StateManager.state.sections.forEach((section, i) => {
+          const li = Utils.createElement('li', {
+            className: 'flex justify-between items-center bg-gray-100 dark:bg-gray-800 p-2 rounded'
+          });
+          // Clickable section name
+          const sectionName = Utils.createElement('span', {
+            className: `text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-500 ${i === StateManager.state.currentSectionIndex ? 'font-semibold' : ''}`,
+            text: section.name
+          });
+          sectionName.onclick = () => {
+            StateManager.update({
+              currentSectionIndex: i,
+              stepIndex: 0
+            });
+          };
+          li.append(sectionName);
+
+          // Controls container for buttons
+          const controls = Utils.createElement('div', { className: 'flex space-x-2' });
+          
+          // Move Up button
+          const moveUp = Utils.createElement('button', {
+            className: 'text-blue-500 hover:text-blue-700 text-sm',
+            text: '↑',
+            disabled: i === 0
+          });
+          moveUp.onclick = () => {
+            const sections = [...StateManager.state.sections];
+            [sections[i], sections[i - 1]] = [sections[i - 1], sections[i]];
+            StateManager.update({
+              sections,
+              currentSectionIndex: StateManager.state.currentSectionIndex === i ? i - 1 : StateManager.state.currentSectionIndex
+            });
+          };
+          controls.appendChild(moveUp);
+
+          // Move Down button
+          const moveDown = Utils.createElement('button', {
+            className: 'text-blue-500 hover:text-blue-700 text-sm',
+            text: '↓',
+            disabled: i === StateManager.state.sections.length - 1
+          });
+          moveDown.onclick = () => {
+            const sections = [...StateManager.state.sections];
+            [sections[i], sections[i + 1]] = [sections[i + 1], sections[i]];
+            StateManager.update({
+              sections,
+              currentSectionIndex: StateManager.state.currentSectionIndex === i ? i + 1 : StateManager.state.currentSectionIndex
+            });
+          };
+          controls.appendChild(moveDown);
+
+          // Remove button
+          const rm = Utils.createElement('button', {
+            className: 'text-red-500 hover:text-red-700 text-sm',
+            text: 'Remove'
+          });
+          rm.onclick = () => {
+            StateManager.state.sections.splice(i, 1);
+            delete StateManager.state.loops[section.name];
+            StateManager.update({
+              currentSectionIndex: Math.max(0, StateManager.state.currentSectionIndex - 1)
+            });
+          };
+          controls.appendChild(rm);
+
+          li.appendChild(controls);
+          ul.appendChild(li);
+        });
+        mgr.appendChild(ul);
+        return mgr;
+      },
+
+      // Footer with app branding
+      footer() {
+        return Utils.createElement('div', {
+          className: 'mt-10 text-center text-sm text-gray-400 dark:text-gray-500',
+          text: 'Study Debugger'
+        });
+      }
+    };
+
+    // Renderer Module
+    // Handles rendering the appropriate UI based on state
+    const Renderer = {
+      render() {
+        const root = document.getElementById('root');
+        Utils.clearContainer(root);
+
+        if (!StateManager.state.topic) {
+          root.appendChild(Components.topicForm());
+        } else if (StateManager.state.sections.length === 0) {
+          root.appendChild(Components.sectionForm());
+        } else {
+          root.appendChild(Components.mainUI());
         }
       }
-      container.appendChild(box);
-    }
+    };
 
-    function renderControls(container, section, history) {
-      const ctrls = createElement('div',{className:'flex space-x-4 mb-6'});
-      const prev = createElement('button',{className:'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg disabled:opacity-50',text:'Previous'});
-      prev.disabled = state.stepIndex===0; prev.onclick = ()=>{state.stepIndex--;render();}; ctrls.appendChild(prev);
-      if(state.mode==='sections'){
-        const mark = createElement('button',{className:'px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg',text:'Mark Understood'});
-        mark.onclick = ()=>{section.understood=true; if(state.currentSectionIndex<state.sections.length-1){state.currentSectionIndex++;state.stepIndex=0;}else{state.mode='post';state.stepIndex=0;}render();}; ctrls.appendChild(mark);
-      }
-      const next = createElement('button',{className:'px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-50',text:'Next'});
-      next.disabled = (state.mode==='post'&&state.stepIndex>=POST_STEPS.length-1);
-      next.onclick = ()=>{if(state.mode==='sections'){if(state.stepIndex<SECTION_STEPS.length-1){state.stepIndex++;}else{history.push(Array(SECTION_STEPS.length).fill(''));state.stepIndex=0;}}else{state.stepIndex=Math.min(state.stepIndex+1,POST_STEPS.length-1);}render();}; ctrls.appendChild(next);
-      container.appendChild(ctrls);
-    }
+    // Initialize Application
+    // Warn before leaving to prevent data loss
+    window.addEventListener('beforeunload', (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    });
 
-    function renderSectionManager(container) {
-      const mgr = createElement('div',{className:'mt-6'});
-      mgr.append(createElement('h2',{className:'font-semibold mb-2',text:'Manage Sections'}));
-      const row = createElement('div',{className:'flex space-x-2 mb-4'});
-      const inp = createElement('input',{className:'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1'});
-      inp.placeholder='Section name'; const ab = createElement('button',{className:'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',text:'Add Section'});
-      ab.onclick = ()=>{const n=inp.value.trim();if(!n)return;state.sections.push({name:n,understood:false});state.loops[n]=[];inp.value='';render();}; row.append(inp,ab);mgr.appendChild(row);
-      const ul = createElement('ul',{className:'space-y-2'});
-      state.sections.forEach((s,i)=>{const li = createElement('li',{className:'flex justify-between items-center bg-gray-100 dark:bg-gray-800 p-2 rounded'});
-        li.append(createElement('span',{className:'text-gray-900 dark:text-gray-100',text:s.name}));
-        const rm = createElement('button',{className:'text-red-500 hover:text-red-700 text-sm',text:'Remove'});
-        rm.onclick = ()=>{state.sections.splice(i,1);delete state.loops[s.name];state.currentSectionIndex=Math.max(0,state.currentSectionIndex-1);render();};
-        li.appendChild(rm);ul.appendChild(li);
-      });mgr.appendChild(ul);container.appendChild(mgr);
-    }
-
-    function renderFooter(container) {
-      container.appendChild(createElement('div',{className:'mt-10 text-center text-sm text-gray-400 dark:text-gray-500',text:'Study Debugger'}));
-    }
-
-    render();
+    // Start the application
+    Renderer.render();
   </script>
 </body>
 </html>
