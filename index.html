@@ -105,7 +105,7 @@
       sectionForm() {
         const card = Utils.createElement('div', { className: 'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow' });
         card.append(
-          Utils.createElement('h1', { className: 'text-2xl font-semibold mb-2', text: StateManager.state.topic }),
+          this.topicEditSection(),
           Utils.createElement('p', { className: 'mb-4', text: 'Add sections to begin:' })
         );
         const row = Utils.createElement('div', { className: 'flex space-x-2' });
@@ -139,8 +139,9 @@
         const loopIndex = loops.length - 1;
 
         const card = Utils.createElement('div', { className: 'bg-white dark:bg-gray-800 p-6 rounded-2xl shadow' });
+        card.append(this.topicEditSection());
+
         card.append(
-          Utils.createElement('h1', { className: 'text-2xl font-semibold mb-1', text: StateManager.state.topic }),
           Utils.createElement('h2', { className: 'text-xl font-medium mb-4', text: 'Study Debugger' })
         );
 
@@ -156,6 +157,63 @@
 
         card.appendChild(this.footer());
         return card;
+      },
+
+      // Topic editing section
+      topicEditSection() {
+        const container = Utils.createElement('div', { className: 'mb-4' });
+        const topicDisplay = Utils.createElement('div', { className: 'flex items-center' });
+        topicDisplay.append(
+          Utils.createElement('h1', {
+            className: 'text-2xl font-semibold mr-2',
+            text: StateManager.state.topic
+          })
+        );
+        const editBtn = Utils.createElement('button', {
+          className: 'text-blue-500 hover:text-blue-700 text-sm',
+          text: 'Edit'
+        });
+        let isEditing = false;
+
+        editBtn.onclick = () => {
+          isEditing = !isEditing;
+          container.innerHTML = '';
+          if (isEditing) {
+            const input = Utils.createElement('input', {
+              className: 'bg-white dark:bg-gray-700 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 flex-1 mr-2',
+              value: StateManager.state.topic
+            });
+            const saveBtn = Utils.createElement('button', {
+              className: 'bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg',
+              text: 'Save'
+            });
+            saveBtn.onclick = () => {
+              const newTopic = input.value.trim();
+              if (newTopic) {
+                StateManager.update({ topic: newTopic });
+              } else {
+                Renderer.render(); // Re-render to revert if empty
+              }
+            };
+            const cancelBtn = Utils.createElement('button', {
+              className: 'bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg',
+              text: 'Cancel'
+            });
+            cancelBtn.onclick = () => {
+              Renderer.render(); // Re-render to revert
+            };
+            const row = Utils.createElement('div', { className: 'flex space-x-2' });
+            row.append(input, saveBtn, cancelBtn);
+            container.appendChild(row);
+          } else {
+            container.appendChild(topicDisplay);
+            topicDisplay.appendChild(editBtn);
+          }
+        };
+
+        topicDisplay.appendChild(editBtn);
+        container.appendChild(topicDisplay);
+        return container;
       },
 
       // Header showing section info
